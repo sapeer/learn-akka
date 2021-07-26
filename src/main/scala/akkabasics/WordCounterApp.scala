@@ -4,6 +4,7 @@ import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 
 import java.io.File
 import java.util.UUID.randomUUID
+import scala.collection.mutable
 import scala.io.Source
 
 object WordCounterApp extends App {
