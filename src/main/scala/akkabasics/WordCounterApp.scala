@@ -1,11 +1,19 @@
 package akkabasics
 
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import org.bson.types.ObjectId
 
 import java.io.File
 import java.util.UUID.randomUUID
 import scala.collection.mutable
 import scala.io.Source
+import org.mongodb.scala._
+
+import scala.collection.JavaConverters._
+import java.util.concurrent.TimeUnit
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+
 
 object WordCounterApp extends App {
   val VERSION: String = "0.0.1"
@@ -31,6 +39,7 @@ object WordCounterApp extends App {
   )
 
   val aggregator = wordCountActorSystem.actorOf(Props[Aggregator], "aggregator")
+  val persistor = wordCountActorSystem.actorOf(Props[PersistLines], "persistor")
 
   //STEP 1: FileReadActor - create one actor to process each file.
   //FileReadActor - reads each file and sends each line to a new WordCount actor.
@@ -40,16 +49,23 @@ object WordCounterApp extends App {
     case object CountWords
     case class AggregateWords(fileName: String, wc: Int)
     case class PrintCount(fileName: String)
+    case class InsertLine(collection: MongoCollection[Document], file: String, line: String)
   }
   class FileReader(val file: File) extends Actor with ActorLogging {
     import WCMessages._
+    // Use a Connection String
+    val mongoClient: MongoClient = MongoClient("mongodb://localhost:27017")
+    val database: MongoDatabase = mongoClient.getDatabase("wordcountdb")
+    val collection: MongoCollection[Document] = database.getCollection("lines")
 
     override def receive: Receive = {
       case ReadFile =>
         log.info("Inside ReadFile for file :: {}", file)
         val sourceFile = Source.fromFile(file)
-        for (line <- sourceFile.getLines())
+        for (line <- sourceFile.getLines()) {
           context.actorOf(Props(new WordCounter(file, line)), "wordCounter" + randomUUID().toString) ! CountWords
+          persistor ! InsertLine(collection, file.toString, line)
+        }
         sourceFile.close()
     }
   }
@@ -65,7 +81,7 @@ object WordCounterApp extends App {
     }
   }
 
-  //STEP 3: Send message to AggregatorActor to print statistics
+  //STEP 3a : Send message to AggregatorActor to print statistics
   class Aggregator extends Actor with ActorLogging {
     import WCMessages._
 
@@ -80,15 +96,53 @@ object WordCounterApp extends App {
         if (!wordCount.contains(file)) newWordCount = wordCount.updated(file, wc)
         else newWordCount = wordCount.updated(file, wordCount(file) + wc)
         context.become(updateCount(newWordCount))
-        log.info("File :: {}, line count :: {}", file, newWordCount.get(file))
+//        log.info("File :: {}, line count :: {}", file, newWordCount.get(file))
 
       case PrintCount(file: String) =>
         log.info("File :: {}, line count :: {}", file, wordCount.get(file))
     }
   }
 
+  //STEP 3b : Insert into MongoDB
+  class PersistLines extends Actor with ActorLogging {
+    import WCMessages._
+    import Helpers._
+
+    override def receive: Receive = {
+      case InsertLine(collection: MongoCollection[Document], file: String, line: String) =>
+//        log.info("Persisting line :: {} :: in file :: {}", line, file)
+        val doc: Document = Document("_id" -> new ObjectId, "file" -> file, "line" -> line)
+        collection.insertOne(doc).results()
+    }
+  }
+
 //  fileList.foreach(file =>
 //    aggregator ! PrintCount(file.toString)
 //  )
+
+  object Helpers {
+
+    implicit class DocumentObservable[C](val observable: Observable[Document]) extends ImplicitObservable[Document] {
+      override val converter: Document => String = doc => doc.toJson
+    }
+
+    implicit class GenericObservable[C](val observable: Observable[C]) extends ImplicitObservable[C] {
+      override val converter: (C) => String = doc => doc.toString
+    }
+
+    trait ImplicitObservable[C] {
+      val observable: Observable[C]
+      val converter: (C) => String
+
+      def results(): Seq[C] = Await.result(observable.toFuture(), Duration(10, TimeUnit.SECONDS))
+      def headResult() = Await.result(observable.head(), Duration(10, TimeUnit.SECONDS))
+      def printResults(initial: String = ""): Unit = {
+        if (initial.length > 0) print(initial)
+        results().foreach(res => println(converter(res)))
+      }
+      def printHeadResult(initial: String = ""): Unit = println(s"${initial}${converter(headResult())}")
+    }
+
+  }
 
 }
