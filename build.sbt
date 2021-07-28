@@ -6,6 +6,8 @@ scalaVersion := "2.13.6"
 
 val akkaVersion = "2.6.15"
 
+scalacOptions += "-Xasync"
+
 libraryDependencies ++= Seq(
   // https://mvnrepository.com/artifact/com.typesafe.akka/akka-actor
   "com.typesafe.akka" %% "akka-actor" % akkaVersion,
@@ -23,6 +25,6 @@ libraryDependencies ++= Seq(
     // https://mvnrepository.com/artifact/org.slf4j/slf4j-simple
   "org.slf4j" % "slf4j-simple" % "1.7.32",
 
-
+  "org.scala-lang.modules" %% "scala-async" % "0.10.0"
 
 )

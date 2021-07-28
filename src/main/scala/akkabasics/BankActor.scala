@@ -4,14 +4,13 @@ import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akkabasics.BankActor.Person.FinancialLifecycle
 
 object BankActor extends App {
-  object BankAccount {
-    case class Deposit(amount: Double)
-    case class Withdraw(amount: Double)
-    case object Statement
-    case class TxnSuccess(message: String)
-    case class TxnFailure(message: String)
-  }
+  val bankSystem = ActorSystem("BankSystem")
+  val customerSystem = ActorSystem("CustomerSystem")
+  val accountAlice = bankSystem.actorOf(Props[BankAccount], "alice")
+  val alice = customerSystem.actorOf(Props[Person], "alice")
+
   class BankAccount extends Actor {
+
     import BankAccount._
 
     var balance: Double = 0
@@ -40,12 +39,10 @@ object BankActor extends App {
     }
   }
 
-  object Person {
-    case class FinancialLifecycle(account: ActorRef)
-  }
   class Person extends Actor {
-    import Person._
+
     import BankAccount._
+    import Person._
 
     override def receive: Receive = {
       case FinancialLifecycle(account) =>
@@ -60,10 +57,21 @@ object BankActor extends App {
 
   }
 
-  val bankSystem = ActorSystem("BankSystem")
-  val customerSystem = ActorSystem("CustomerSystem")
-  val accountAlice = bankSystem.actorOf(Props[BankAccount], "alice")
-  val alice = customerSystem.actorOf(Props[Person], "alice")
+  object BankAccount {
+    case class Deposit(amount: Double)
+
+    case class Withdraw(amount: Double)
+
+    case class TxnSuccess(message: String)
+
+    case class TxnFailure(message: String)
+
+    case object Statement
+  }
+
+  object Person {
+    case class FinancialLifecycle(account: ActorRef)
+  }
 
   alice ! FinancialLifecycle(accountAlice)
 }

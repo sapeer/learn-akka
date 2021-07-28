@@ -3,6 +3,14 @@ package akkabasics
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 
 object ActorCapabilities extends App {
+  val actorSystem = ActorSystem("ActorDemo")
+  val simpleActor = actorSystem.actorOf(Props[SimpleActor], "simpleActor")
+  val alice = actorSystem.actorOf(Props[SimpleActor], "alice")
+
+  simpleActor ! "Hello Actor"
+  simpleActor ! 42
+  val bob = actorSystem.actorOf(Props[SimpleActor], "bob")
+
   class SimpleActor extends Actor {
     override def receive: Receive = {
       case "Hi !" =>
@@ -19,20 +27,12 @@ object ActorCapabilities extends App {
     }
   }
 
-  val actorSystem = ActorSystem("ActorDemo")
-  val simpleActor = actorSystem.actorOf(Props[SimpleActor], "simpleActor")
-
-  simpleActor ! "Hello Actor"
-  simpleActor ! 42
-
-  case class SpecialMessage(contents: String)
-  case class MessageToSelf(message: String)
-
   simpleActor ! SpecialMessage("message from case class")
   simpleActor ! MessageToSelf("Akka is cool")
 
-  val alice = actorSystem.actorOf(Props[SimpleActor], "alice")
-  val bob = actorSystem.actorOf(Props[SimpleActor], "bob")
+  case class SpecialMessage(contents: String)
+
+  case class MessageToSelf(message: String)
 
   case class SayHiTo(ref: ActorRef)
 
